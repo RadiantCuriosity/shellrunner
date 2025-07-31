@@ -5,8 +5,7 @@ interface for executing and managing shell commands. It listens on a local Unix 
 offering both synchronous and asynchronous execution, job management, and statistics
 tracking.
 
-This project includes a command-line client in Go and a client library in Common Lisp for
-interacting with the server.
+This project includes a command-line client in Go for interacting with the server.
 
 ## Features
 
