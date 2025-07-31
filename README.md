@@ -140,6 +140,36 @@ The project includes a comprehensive suite of unit and integration tests. To run
 go test -v ./...
 ```
 
+### Performance Benchmarking
+
+A stress test is included to benchmark the server's command issuing performance. This test measures how quickly the server can handle concurrent `background` command requests.
+
+#### Running the Stress Test
+
+1.  **Start the `shellrunner` server** in one terminal:
+    ```sh
+    go build && ./shellrunner
+    ```
+
+2.  **Run the benchmark test** in another terminal from the project root:
+    ```sh
+    go test -bench=. -benchmem
+    ```
+
+The output will show the number of operations (commands issued) per second and memory allocations per operation.
+
+##### Example Output
+```
+goos: linux
+goarch: amd64
+pkg: shellrunner
+cpu: Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
+BenchmarkCommandIssuing-12    	   10000	    111435 ns/op	    2432 B/op	      45 allocs/op
+PASS
+ok  	shellrunner	1.234s
+```
+In this example, the server handled 10,000 requests. Each request (`ns/op`) took approximately 111,435 nanoseconds on average.
+
 ## License
 
 This project is licensed under the MIT License.
