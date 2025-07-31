@@ -5,11 +5,13 @@ import (
 	"time"
 )
 
+// setup is a helper function to reset the state of the jobs map before each test.
 func setup(t *testing.T) {
 	t.Helper()
 	jobs = make(map[string]*BackgroundJob)
 }
 
+// TestRun contains unit tests for the Run method.
 func TestRun(t *testing.T) {
 	setup(t)
 	shellRunner := new(ShellRunner)
@@ -62,6 +64,7 @@ func TestRun(t *testing.T) {
 	})
 }
 
+// TestBackground contains unit tests for the Background method.
 func TestBackground(t *testing.T) {
 	setup(t)
 	shellRunner := new(ShellRunner)
@@ -104,6 +107,7 @@ func TestBackground(t *testing.T) {
 	mutex.Unlock()
 }
 
+// TestStatus contains unit tests for the Status method.
 func TestStatus(t *testing.T) {
 	setup(t)
 	shellRunner := new(ShellRunner)
@@ -137,6 +141,7 @@ func TestStatus(t *testing.T) {
 	}
 }
 
+// TestOutput contains unit tests for the Output method.
 func TestOutput(t *testing.T) {
 	setup(t)
 	shellRunner := new(ShellRunner)

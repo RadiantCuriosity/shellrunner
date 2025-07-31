@@ -11,41 +11,41 @@ import (
 
 var serverCmd *exec.Cmd
 
+// TestMain sets up and tears down the integration test environment.
 func TestMain(m *testing.M) {
-	// Build the server binary
+	// Build the server binary for testing.
 	buildCmd := exec.Command("go", "build", "-o", "shellrunner_test")
 	if err := buildCmd.Run(); err != nil {
 		panic("failed to build server binary: " + err.Error())
 	}
 	defer os.Remove("shellrunner_test")
 
-	// Start the server
+	// Start the server in a separate process group.
 	serverCmd = exec.Command("./shellrunner_test")
-	// Start the command in a new process group
 	serverCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := serverCmd.Start(); err != nil {
 		panic("failed to start server: " + err.Error())
 	}
 
-	// Give the server a moment to start up and create the socket
+	// Give the server a moment to start up and create the socket.
 	time.Sleep(100 * time.Millisecond)
 
-	// Run the tests
+	// Run the integration tests.
 	code := m.Run()
 
-	// Stop the server by killing the process group
+	// Stop the server by killing its process group.
 	if err := syscall.Kill(-serverCmd.Process.Pid, syscall.SIGKILL); err != nil {
-		// It might have already exited, so don't panic
-		// panic("failed to kill server process group: " + err.Error())
+		// It might have already exited, so don't panic.
 	}
-	serverCmd.Wait() // Clean up zombie processes
+	serverCmd.Wait() // Clean up zombie processes.
 
-	// Clean up the socket file
+	// Clean up the socket file.
 	os.Remove("/tmp/shellrunner.sock")
 
 	os.Exit(code)
 }
 
+// runClient is a helper function to execute the client CLI and parse its JSON output.
 func runClient(t *testing.T, args ...string) map[string]interface{} {
 	t.Helper()
 	cmdArgs := append([]string{"run", "client/main.go"}, args...)
@@ -65,6 +65,7 @@ func runClient(t *testing.T, args ...string) map[string]interface{} {
 	return reply
 }
 
+// TestIntegrationRun tests the synchronous "run" command.
 func TestIntegrationRun(t *testing.T) {
 	reply := runClient(t, "run", `echo "hello integration"`)
 	if reply["stdout"] != "hello integration\n" {
@@ -75,30 +76,31 @@ func TestIntegrationRun(t *testing.T) {
 	}
 }
 
+// TestIntegrationBackgroundWorkflow tests the full asynchronous workflow.
 func TestIntegrationBackgroundWorkflow(t *testing.T) {
-	// 1. Start a background job
+	// 1. Start a background job.
 	bgReply := runClient(t, "background", `sleep 0.3; echo "workflow done"`)
 	jobID, ok := bgReply["job_id"].(string)
 	if !ok || jobID == "" {
 		t.Fatalf("did not get a valid job_id from background command: %v", bgReply)
 	}
 
-	// 2. Check status while running
+	// 2. Check status while running.
 	statusReply := runClient(t, "status", jobID)
 	if statusReply["status"] != "running" {
 		t.Errorf("expected status to be 'running', got %q", statusReply["status"])
 	}
 
-	// 3. Wait for it to finish
+	// 3. Wait for it to finish.
 	time.Sleep(400 * time.Millisecond)
 
-	// 4. Check status after completion
+	// 4. Check status after completion.
 	finalStatusReply := runClient(t, "status", jobID)
 	if finalStatusReply["status"] != "exited" {
 		t.Errorf("expected status to be 'exited', got %q", finalStatusReply["status"])
 	}
 
-	// 5. Check the output
+	// 5. Check the output.
 	outputReply := runClient(t, "output", jobID)
 	if outputReply["stdout"] != "workflow done\n" {
 		t.Errorf("expected stdout 'workflow done\\n', got %q", outputReply["stdout"])

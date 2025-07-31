@@ -1,8 +1,11 @@
+// Package main implements a JSON-RPC server that executes shell commands.
 package main
 
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"log"
 	"net"
 	"net/rpc"
 	"net/rpc/jsonrpc"
@@ -14,6 +17,7 @@ import (
 	"github.com/google/uuid"
 )
 
+// BackgroundJob represents a command running in the background.
 type BackgroundJob struct {
 	Cmd       *exec.Cmd
 	Stdout    bytes.Buffer
@@ -24,13 +28,20 @@ type BackgroundJob struct {
 }
 
 var (
-	jobs  = make(map[string]*BackgroundJob)
+	// jobs stores all background jobs, keyed by their unique ID.
+	jobs = make(map[string]*BackgroundJob)
+	// mutex protects access to the jobs map.
 	mutex = &sync.Mutex{}
+	// logger is used for optional logging.
+	logger *log.Logger
 )
 
+// ShellRunner is the receiver for the RPC methods.
 type ShellRunner struct{}
 
+// Run executes a command synchronously and returns its output and exit code.
 func (s *ShellRunner) Run(cmd string, reply *map[string]interface{}) error {
+	logger.Printf("Run called with command: %q", cmd)
 	command := exec.Command("bash", "-c", cmd)
 	var stdout, stderr bytes.Buffer
 	command.Stdout = &stdout
@@ -45,16 +56,21 @@ func (s *ShellRunner) Run(cmd string, reply *map[string]interface{}) error {
 		if exitError, ok := err.(*exec.ExitError); ok {
 			(*reply)["exit_code"] = exitError.ExitCode()
 		} else {
-			return err
+			// For other errors (e.g., command not found), we still want to return
+			// the captured output, so we don't return the error directly.
+			(*reply)["exit_code"] = -1
 		}
 	} else {
 		(*reply)["exit_code"] = 0
 	}
 
+	logger.Printf("Run finished for command: %q", cmd)
 	return nil
 }
 
+// Background executes a command asynchronously, returning a unique job ID.
 func (s *ShellRunner) Background(cmd string, reply *string) error {
+	logger.Printf("Background called with command: %q", cmd)
 	mutex.Lock()
 	defer mutex.Unlock()
 
@@ -71,7 +87,9 @@ func (s *ShellRunner) Background(cmd string, reply *string) error {
 
 	jobs[id] = job
 
+	// Run the command in a goroutine to make it non-blocking.
 	go func(job *BackgroundJob) {
+		logger.Printf("Starting background job %s: %s", id, cmd)
 		err := job.Cmd.Run()
 		mutex.Lock()
 		defer mutex.Unlock()
@@ -88,13 +106,16 @@ func (s *ShellRunner) Background(cmd string, reply *string) error {
 			job.Status = "exited"
 			job.ExitCode = 0
 		}
+		logger.Printf("Background job %s finished with status %s and exit code %d", id, job.Status, job.ExitCode)
 	}(job)
 
 	*reply = id
 	return nil
 }
 
+// Status returns the current status and execution time of a background job.
 func (s *ShellRunner) Status(id string, reply *map[string]interface{}) error {
+	logger.Printf("Status called for job ID: %s", id)
 	mutex.Lock()
 	defer mutex.Unlock()
 
@@ -109,7 +130,9 @@ func (s *ShellRunner) Status(id string, reply *map[string]interface{}) error {
 	return nil
 }
 
+// Output returns the stdout and stderr of a background job.
 func (s *ShellRunner) Output(id string, reply *map[string]interface{}) error {
+	logger.Printf("Output called for job ID: %s", id)
 	mutex.Lock()
 	defer mutex.Unlock()
 
@@ -125,27 +148,41 @@ func (s *ShellRunner) Output(id string, reply *map[string]interface{}) error {
 }
 
 func main() {
+	// Setup logging.
+	if os.Getenv("SHELLRUNNER_LOGGING") == "true" {
+		logger = log.New(os.Stdout, "[shellrunner] ", log.LstdFlags)
+	} else {
+		// Discard logs if not enabled.
+		logger = log.New(io.Discard, "", 0)
+	}
+
+	logger.Println("Server starting...")
+
 	shellRunner := new(ShellRunner)
 	rpc.Register(shellRunner)
 
 	socketPath := "/tmp/shellrunner.sock"
-	os.Remove(socketPath) // Remove any old socket file
+	// Ensure the socket from a previous run is removed.
+	if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
+		log.Fatalf("failed to remove old socket: %v", err)
+	}
 
 	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
-		fmt.Println("Error listening:", err)
-		return
+		logger.Fatalf("Error listening: %v", err)
 	}
 	defer listener.Close()
 
-	fmt.Println("Server listening on", socketPath)
+	logger.Println("Server listening on", socketPath)
 
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			fmt.Println("Error accepting connection:", err)
+			logger.Printf("Error accepting connection: %v", err)
 			continue
 		}
+		logger.Printf("Accepted new connection from %s", conn.RemoteAddr().String())
+		// Handle each connection in a new goroutine.
 		go jsonrpc.ServeConn(conn)
 	}
 }
