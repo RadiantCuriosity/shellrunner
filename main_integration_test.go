@@ -203,3 +203,41 @@ func TestIntegrationList(t *testing.T) {
 	runClient(t, "release", jobID1)
 	runClient(t, "release", jobID2)
 }
+
+func TestIntegrationReleaseAll(t *testing.T) {
+	// 1. Start a mix of jobs
+	runClient(t, "background", `echo "finished"`)
+	bgReply2 := runClient(t, "background", `sleep 2`)
+	jobID2, _ := bgReply2["job_id"].(string)
+
+	// 2. Wait for the first job to finish
+	time.Sleep(100 * time.Millisecond)
+
+	// 3. Release all finished jobs
+	releaseReply := runClient(t, "release-all")
+	if count, ok := releaseReply["released_count"].(float64); !ok || count != 1 {
+		t.Errorf("expected to release 1 job, got %v", releaseReply)
+	}
+
+	// 4. Verify that the running job still exists and the finished one is gone
+	cmdArgs := append([]string{"run", "client/main.go"}, "list")
+	cmd := exec.Command("go", cmdArgs...)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("client command failed: %v", err)
+	}
+	var ids []string
+	if err := json.Unmarshal(out, &ids); err != nil {
+		t.Fatalf("failed to unmarshal list output: %v", err)
+	}
+
+	if len(ids) != 1 {
+		t.Fatalf("expected 1 job to remain, got %d", len(ids))
+	}
+	if ids[0] != jobID2 {
+		t.Errorf("expected remaining job to be %s, got %s", jobID2, ids[0])
+	}
+
+	// 5. Clean up the remaining job
+	runClient(t, "release", jobID2)
+}

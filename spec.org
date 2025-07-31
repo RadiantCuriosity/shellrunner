@@ -13,9 +13,9 @@ return values, it also returns the exit code. This is a blocking call until the 
 exits.
 
 ** background
-Takes a full string as input and immediatly return a unique id. In the background it runs
-a bash shell with the argument as "-c", it collects the stdout and stderr and any exit
-codes. This is a non-blocking call.
+Takes a full string as input and immediatly return a unique 8-character hexadecimal ID.
+In the background it runs a bash shell with the argument as "-c", it collects the stdout
+and stderr and any exit codes. This is a non-blocking call.
 
 ** status
 Takes a unique id returned earlier by 'background' and returns that execution's status,
@@ -29,6 +29,9 @@ stderr. It can optionally release the job's resources after returning the output
 ** release
 Takes a unique id and removes the corresponding job's data from memory, allowing it to be
 garbage collected.
+
+** release-all
+Releases all finished jobs from memory.
 
 ** list
 Returns a list of all job IDs currently in memory.
@@ -71,6 +74,7 @@ The available methods are:
 - `status <job_id>`: Checks the status of a background job.
 - `output <job_id> [--release]`: Retrieves the output of a background job. If `--release` is specified, the job's resources are freed after retrieval.
 - `release <job_id>`: Releases the resources for a completed job.
+- `release-all`: Releases all finished jobs.
 - `list`: Lists the IDs of all jobs currently in memory.
 
 **** Examples
@@ -84,14 +88,14 @@ go run client/main.go background "sleep 5; echo 'done'"
 # List all jobs
 go run client/main.go list
 
-# Check the status of a job (replace with a real job_id)
-go run client/main.go status "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+# Check the status of a job (e.g., 00000001)
+go run client/main.go status "00000001"
 
-# Get the output of a job and release it (replace with a real job_id)
-go run client/main.go output "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" --release
+# Get the output of a job and release it
+go run client/main.go output "00000001" --release
 
-# Release a job's resources manually (replace with a real job_id)
-go run client/main.go release "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+# Release all finished jobs
+go run client/main.go release-all
 #+end_src
 
 *** Logging

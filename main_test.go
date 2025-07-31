@@ -11,6 +11,7 @@ import (
 func setup(t *testing.T) {
 	t.Helper()
 	jobs = make(map[string]*BackgroundJob)
+	jobCounter = 0
 	logger = log.New(io.Discard, "", 0)
 }
 
@@ -76,8 +77,8 @@ func TestBackground(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if id == "" {
-		t.Fatal("expected a job id, got empty string")
+	if id != "00000001" {
+		t.Fatalf("expected a job id '00000001', got %s", id)
 	}
 
 	// Allow time for the command to start
@@ -186,7 +187,7 @@ func TestOutput(t *testing.T) {
 		}
 	})
 
-	t.Run("with release", func(t *testing.T) {
+		t.Run("with release", func(t *testing.T) {
 		var id string
 		err := shellRunner.Background(`echo "test"`, &id)
 		if err != nil {
@@ -256,6 +257,40 @@ func TestRelease(t *testing.T) {
 	}
 }
 
+// TestReleaseAll contains unit tests for the ReleaseAll method.
+func TestReleaseAll(t *testing.T) {
+	setup(t)
+	shellRunner := new(ShellRunner)
+
+	// Create a mix of finished and running jobs
+	var finishedID1, finishedID2, runningID string
+	shellRunner.Background("echo 'finished 1'", &finishedID1)
+	shellRunner.Background("echo 'finished 2'", &finishedID2)
+	shellRunner.Background("sleep 1", &runningID)
+
+	time.Sleep(100 * time.Millisecond) // Allow finished jobs to complete
+
+	var releasedCount int
+	err := shellRunner.ReleaseAll(struct{}{}, &releasedCount)
+	if err != nil {
+		t.Fatalf("ReleaseAll failed: %v", err)
+	}
+
+	if releasedCount != 2 {
+		t.Errorf("expected to release 2 jobs, but released %d", releasedCount)
+	}
+
+	// Verify that only the running job remains
+	mutex.Lock()
+	defer mutex.Unlock()
+	if len(jobs) != 1 {
+		t.Errorf("expected 1 job to remain, but found %d", len(jobs))
+	}
+	if _, ok := jobs[runningID]; !ok {
+		t.Errorf("running job with id %s was released", runningID)
+	}
+}
+
 // TestList contains unit tests for the List method.
 func TestList(t *testing.T) {
 	setup(t)
@@ -268,7 +303,7 @@ func TestList(t *testing.T) {
 		t.Fatalf("list failed: %v", err)
 	}
 	if len(reply) != 0 {
-				t.Errorf("expected 0 jobs, got %d", len(reply))
+		t.Errorf("expected 0 jobs, got %d", len(reply))
 	}
 
 	// 2. Test with a few jobs

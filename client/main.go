@@ -20,7 +20,7 @@ func main() {
 	// Basic command-line argument validation.
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: go run client/main.go <method> [args...]")
-		fmt.Println("Methods: run, background, status, output, release, list")
+		fmt.Println("Methods: run, background, status, output, release, list, release-all")
 		return
 	}
 
@@ -83,6 +83,10 @@ func main() {
 		var reply []string
 		callErr = c.Call("ShellRunner.List", struct{}{}, &reply)
 		result = reply
+	case "release-all":
+		var reply int
+		callErr = c.Call("ShellRunner.ReleaseAll", struct{}{}, &reply)
+		result = map[string]int{"released_count": reply}
 	default:
 		log.Fatalf("Unknown method: %s", method)
 	}

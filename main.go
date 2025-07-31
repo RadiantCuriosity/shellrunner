@@ -14,8 +14,6 @@ import (
 	"os/exec"
 	"sync"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 // BackgroundJob represents a command running in the background.
@@ -33,7 +31,9 @@ type BackgroundJob struct {
 var (
 	// jobs stores all background jobs, keyed by their unique ID.
 	jobs = make(map[string]*BackgroundJob)
-	// mutex protects access to the jobs map.
+	// jobCounter is used to generate sequential job IDs.
+	jobCounter uint64
+	// mutex protects access to the jobs map and the jobCounter.
 	mutex = &sync.Mutex{}
 	// logger is used for optional logging.
 	logger *log.Logger
@@ -77,7 +77,8 @@ func (s *ShellRunner) Background(cmd string, reply *string) error {
 	mutex.Lock()
 	defer mutex.Unlock()
 
-	id := uuid.New().String()
+	jobCounter++
+	id := fmt.Sprintf("%08x", jobCounter)
 	command := exec.Command("bash", "-c", cmd)
 
 	job := &BackgroundJob{
@@ -185,6 +186,24 @@ func (s *ShellRunner) Release(id string, reply *bool) error {
 	delete(jobs, id)
 	*reply = true
 	logger.Printf("Released job %s", id)
+	return nil
+}
+
+// ReleaseAll removes all finished jobs from memory.
+func (s *ShellRunner) ReleaseAll(args struct{}, reply *int) error {
+	logger.Println("ReleaseAll called")
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	releasedCount := 0
+	for id, job := range jobs {
+		if job.Status == "exited" || job.Status == "errored" {
+			delete(jobs, id)
+			releasedCount++
+		}
+	}
+	*reply = releasedCount
+	logger.Printf("Released %d finished jobs", releasedCount)
 	return nil
 }
 
