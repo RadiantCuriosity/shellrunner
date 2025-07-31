@@ -10,6 +10,12 @@ import (
 	"os"
 )
 
+// RunArgs matches the server's argument struct for the Run method.
+type RunArgs struct {
+	Command string
+	Keep    bool
+}
+
 // OutputArgs matches the server's argument struct for the Output method.
 type OutputArgs struct {
 	ID      string
@@ -20,7 +26,7 @@ func main() {
 	// Basic command-line argument validation.
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: go run client/main.go <method> [args...]")
-		fmt.Println("Methods: run, background, status, output, release, list, release-all")
+		fmt.Println("Methods: run, background, status, output, release, list, release-all, statistics")
 		return
 	}
 
@@ -42,10 +48,14 @@ func main() {
 	switch method {
 	case "run":
 		if len(os.Args) < 3 {
-			log.Fatal("Usage: go run client/main.go run <command>")
+			log.Fatal("Usage: go run client/main.go run <command> [--keep]")
+		}
+		args := RunArgs{Command: os.Args[2]}
+		if len(os.Args) > 3 && os.Args[3] == "--keep" {
+			args.Keep = true
 		}
 		var reply map[string]interface{}
-		callErr = c.Call("ShellRunner.Run", os.Args[2], &reply)
+		callErr = c.Call("ShellRunner.Run", args, &reply)
 		result = reply
 	case "background":
 		if len(os.Args) < 3 {
@@ -87,6 +97,10 @@ func main() {
 		var reply int
 		callErr = c.Call("ShellRunner.ReleaseAll", struct{}{}, &reply)
 		result = map[string]int{"released_count": reply}
+	case "statistics":
+		var reply map[string]interface{}
+		callErr = c.Call("ShellRunner.Statistics", struct{}{}, &reply)
+		result = reply
 	default:
 		log.Fatalf("Unknown method: %s", method)
 	}

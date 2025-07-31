@@ -28,6 +28,13 @@ type BackgroundJob struct {
 	ExitCode  int
 }
 
+// ExecutionStatistics holds statistics about command executions.
+type ExecutionStatistics struct {
+	TotalCount    int64
+	TotalDuration time.Duration
+	MaxDuration   time.Duration
+}
+
 var (
 	// jobs stores all background jobs, keyed by their unique ID.
 	jobs = make(map[string]*BackgroundJob)
@@ -37,37 +44,79 @@ var (
 	mutex = &sync.Mutex{}
 	// logger is used for optional logging.
 	logger *log.Logger
+	// stats holds the execution statistics.
+	stats      = &ExecutionStatistics{}
+	statsMutex = &sync.Mutex{}
 )
+
+func updateStats(duration time.Duration) {
+	statsMutex.Lock()
+	defer statsMutex.Unlock()
+
+	stats.TotalCount++
+	stats.TotalDuration += duration
+	if duration > stats.MaxDuration {
+		stats.MaxDuration = duration
+	}
+}
 
 // ShellRunner is the receiver for the RPC methods.
 type ShellRunner struct{}
 
+// RunArgs defines the arguments for the Run method.
+type RunArgs struct {
+	Command string
+	Keep    bool
+}
+
 // Run executes a command synchronously and returns its output and exit code.
-func (s *ShellRunner) Run(cmd string, reply *map[string]interface{}) error {
-	logger.Printf("Run called with command: %q", cmd)
-	command := exec.Command("bash", "-c", cmd)
+func (s *ShellRunner) Run(args RunArgs, reply *map[string]interface{}) error {
+	logger.Printf("Run called with command: %q, Keep: %t", args.Command, args.Keep)
+	command := exec.Command("bash", "-c", args.Command)
 	var stdout, stderr bytes.Buffer
 	command.Stdout = &stdout
 	command.Stderr = &stderr
 
+	startTime := time.Now()
 	err := command.Run()
+	endTime := time.Now()
+
+	updateStats(endTime.Sub(startTime))
 
 	(*reply)["stdout"] = stdout.String()
 	(*reply)["stderr"] = stderr.String()
 
+	exitCode := 0
 	if err != nil {
 		if exitError, ok := err.(*exec.ExitError); ok {
-			(*reply)["exit_code"] = exitError.ExitCode()
+			exitCode = exitError.ExitCode()
 		} else {
-			// For other errors (e.g., command not found), we still want to return
-			// the captured output, so we don't return the error directly.
-			(*reply)["exit_code"] = -1
+			exitCode = -1
 		}
-	} else {
-		(*reply)["exit_code"] = 0
+	}
+	(*reply)["exit_code"] = exitCode
+
+	if args.Keep {
+		mutex.Lock()
+		defer mutex.Unlock()
+		jobCounter++
+		id := fmt.Sprintf("%d", jobCounter)
+		job := &BackgroundJob{
+			Command:   args.Command,
+			Cmd:       command,
+			Stdout:    stdout,
+			Stderr:    stderr,
+			StartTime: startTime,
+			EndTime:   endTime,
+			Status:    "exited",
+			ExitCode:  exitCode,
+		}
+		jobs[id] = job
+		(*reply)["job_id"] = id
+		logger.Printf("Kept job %s for command: %q", id, args.Command)
 	}
 
-	logger.Printf("Run finished for command: %q", cmd)
+	logger.Printf("Run finished for command: %q", args.Command)
 	return nil
 }
 
@@ -78,7 +127,7 @@ func (s *ShellRunner) Background(cmd string, reply *string) error {
 	defer mutex.Unlock()
 
 	jobCounter++
-	id := fmt.Sprintf("%08x", jobCounter)
+	id := fmt.Sprintf("%d", jobCounter)
 	command := exec.Command("bash", "-c", cmd)
 
 	job := &BackgroundJob{
@@ -96,10 +145,11 @@ func (s *ShellRunner) Background(cmd string, reply *string) error {
 	go func(job *BackgroundJob) {
 		logger.Printf("Starting background job %s: %s", id, cmd)
 		err := job.Cmd.Run()
+		job.EndTime = time.Now()
+		updateStats(job.EndTime.Sub(job.StartTime))
+
 		mutex.Lock()
 		defer mutex.Unlock()
-
-		job.EndTime = time.Now()
 		if err != nil {
 			if exitError, ok := err.(*exec.ExitError); ok {
 				job.ExitCode = exitError.ExitCode()
@@ -219,6 +269,24 @@ func (s *ShellRunner) List(args struct{}, reply *[]string) error {
 	}
 
 	*reply = ids
+	return nil
+}
+
+// Statistics returns statistics about command executions.
+func (s *ShellRunner) Statistics(args struct{}, reply *map[string]interface{}) error {
+	logger.Println("Statistics called")
+	statsMutex.Lock()
+	defer statsMutex.Unlock()
+
+	var avgDuration float64
+	if stats.TotalCount > 0 {
+		avgDuration = stats.TotalDuration.Seconds() / float64(stats.TotalCount)
+	}
+
+	(*reply)["total_count"] = stats.TotalCount
+	(*reply)["average_duration_seconds"] = avgDuration
+	(*reply)["max_duration_seconds"] = stats.MaxDuration.Seconds()
+
 	return nil
 }
 

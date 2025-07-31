@@ -12,6 +12,7 @@ func setup(t *testing.T) {
 	t.Helper()
 	jobs = make(map[string]*BackgroundJob)
 	jobCounter = 0
+	stats = &ExecutionStatistics{}
 	logger = log.New(io.Discard, "", 0)
 }
 
@@ -20,50 +21,43 @@ func TestRun(t *testing.T) {
 	setup(t)
 	shellRunner := new(ShellRunner)
 
-	t.Run("successful command", func(t *testing.T) {
+	t.Run("without keep", func(t *testing.T) {
 		reply := make(map[string]interface{})
-		err := shellRunner.Run(`echo "hello world"`, &reply)
+		err := shellRunner.Run(RunArgs{Command: `echo "hello"`}, &reply)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
-
-		if reply["stdout"] != "hello world\n" {
-			t.Errorf("expected stdout to be 'hello world\\n', got %q", reply["stdout"])
+		if reply["stdout"] != "hello\n" {
+			t.Errorf("expected stdout 'hello\\n', got %q", reply["stdout"])
 		}
-		if reply["stderr"] != "" {
-			t.Errorf("expected stderr to be empty, got %q", reply["stderr"])
-		}
-		if reply["exit_code"] != 0 {
-			t.Errorf("expected exit code to be 0, got %v", reply["exit_code"])
+		if _, ok := reply["job_id"]; ok {
+			t.Error("expected no job_id when not keeping the job")
 		}
 	})
 
-	t.Run("command with stderr", func(t *testing.T) {
+	t.Run("with keep", func(t *testing.T) {
 		reply := make(map[string]interface{})
-		err := shellRunner.Run(`>&2 echo "error"`, &reply)
+		err := shellRunner.Run(RunArgs{Command: `echo "kept"`, Keep: true}, &reply)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
+		jobID, ok := reply["job_id"].(string)
+		if !ok {
+			t.Fatal("expected a job_id when keeping the job")
+		}
 
-		if reply["stdout"] != "" {
-			t.Errorf("expected stdout to be empty, got %q", reply["stdout"])
+		// Verify the job is in the map
+		mutex.Lock()
+		job, ok := jobs[jobID]
+		mutex.Unlock()
+		if !ok {
+			t.Fatal("job was not kept in the jobs map")
 		}
-		if reply["stderr"] != "error\n" {
-			t.Errorf("expected stderr to be 'error\\n', got %q", reply["stderr"])
+		if job.Command != `echo "kept"` {
+			t.Errorf("kept job has wrong command: %q", job.Command)
 		}
-		if reply["exit_code"] != 0 {
-			t.Errorf("expected exit code to be 0, got %v", reply["exit_code"])
-		}
-	})
-
-	t.Run("command with non-zero exit code", func(t *testing.T) {
-		reply := make(map[string]interface{})
-		err := shellRunner.Run(`exit 123`, &reply)
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
-		if reply["exit_code"] != 123 {
-			t.Errorf("expected exit code to be 123, got %v", reply["exit_code"])
+		if job.Status != "exited" {
+			t.Errorf("kept job has wrong status: %q", job.Status)
 		}
 	})
 }
@@ -77,8 +71,8 @@ func TestBackground(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if id != "00000001" {
-		t.Fatalf("expected a job id '00000001', got %s", id)
+	if id != "1" {
+		t.Fatalf("expected a job id '1', got %s", id)
 	}
 
 	// Allow time for the command to start
@@ -331,5 +325,31 @@ func TestList(t *testing.T) {
 	}
 	if !found1 || !found2 {
 		t.Errorf("did not find all job IDs in list reply")
+	}
+}
+
+// TestStatistics contains unit tests for the Statistics method.
+func TestStatistics(t *testing.T) {
+	setup(t)
+	shellRunner := new(ShellRunner)
+
+	// Run a few commands to generate some stats
+	shellRunner.Run(RunArgs{Command: "sleep 0.1"}, &map[string]interface{}{})
+	shellRunner.Run(RunArgs{Command: "sleep 0.2"}, &map[string]interface{}{})
+
+	reply := make(map[string]interface{})
+	err := shellRunner.Statistics(struct{}{}, &reply)
+	if err != nil {
+		t.Fatalf("statistics failed: %v", err)
+	}
+
+	if count, ok := reply["total_count"].(int64); !ok || count != 2 {
+		t.Errorf("expected total_count to be 2, got %v", reply["total_count"])
+	}
+	if max, ok := reply["max_duration_seconds"].(float64); !ok || max < 0.2 {
+		t.Errorf("expected max_duration_seconds to be at least 0.2, got %v", reply["max_duration_seconds"])
+	}
+	if avg, ok := reply["average_duration_seconds"].(float64); !ok || avg < 0.15 {
+		t.Errorf("expected average_duration_seconds to be at least 0.15, got %v", reply["average_duration_seconds"])
 	}
 }

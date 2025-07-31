@@ -68,13 +68,38 @@ func runClient(t *testing.T, args ...string) map[string]interface{} {
 
 // TestIntegrationRun tests the synchronous "run" command.
 func TestIntegrationRun(t *testing.T) {
-	reply := runClient(t, "run", `echo "hello integration"`)
-	if reply["stdout"] != "hello integration\n" {
-		t.Errorf("expected stdout 'hello integration\\n', got %q", reply["stdout"])
-	}
-	if reply["exit_code"].(float64) != 0 {
-		t.Errorf("expected exit code 0, got %v", reply["exit_code"])
-	}
+	t.Run("without keep", func(t *testing.T) {
+		reply := runClient(t, "run", `echo "hello integration"`)
+		if reply["stdout"] != "hello integration\n" {
+			t.Errorf("expected stdout 'hello integration\\n', got %q", reply["stdout"])
+		}
+		if reply["exit_code"].(float64) != 0 {
+			t.Errorf("expected exit code 0, got %v", reply["exit_code"])
+		}
+		if _, ok := reply["job_id"]; ok {
+			t.Error("did not expect a job_id when not using --keep")
+		}
+	})
+
+	t.Run("with keep", func(t *testing.T) {
+		reply := runClient(t, "run", `echo "kept"`, "--keep")
+		jobID, ok := reply["job_id"].(string)
+		if !ok || jobID == "" {
+			t.Fatalf("did not get a valid job_id from run --keep: %v", reply)
+		}
+
+		// Verify the job can be queried via status
+		statusReply := runClient(t, "status", jobID)
+		if statusReply["command"] != `echo "kept"` {
+			t.Errorf("kept job has wrong command: %q", statusReply["command"])
+		}
+		if statusReply["status"] != "exited" {
+			t.Errorf("kept job has wrong status: %q", statusReply["status"])
+		}
+
+		// Clean up the kept job
+		runClient(t, "release", jobID)
+	})
 }
 
 // TestIntegrationBackgroundWorkflow tests the full asynchronous workflow.
@@ -240,4 +265,32 @@ func TestIntegrationReleaseAll(t *testing.T) {
 
 	// 5. Clean up the remaining job
 	runClient(t, "release", jobID2)
+}
+
+func resetClient(t *testing.T) {
+	t.Helper()
+	cmd := exec.Command("go", "run", "client/main.go", "reset")
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to reset server state: %v", err)
+	}
+}
+
+func TestIntegrationStatistics(t *testing.T) {
+	// 1. Get the initial statistics
+	initialStats := runClient(t, "statistics")
+	initialCount := initialStats["total_count"].(float64)
+
+	// 2. Run a few commands to generate stats
+	runClient(t, "run", "sleep 0.1")
+	runClient(t, "background", "sleep 0.2")
+	time.Sleep(300 * time.Millisecond) // Ensure background job finishes
+
+	// 3. Get the final statistics
+	finalStats := runClient(t, "statistics")
+
+	// 4. Verify that the count has increased
+	newCount := finalStats["total_count"].(float64)
+	if newCount <= initialCount {
+		t.Errorf("expected total_count to increase, but it did not")
+	}
 }
