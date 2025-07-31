@@ -1,0 +1,27 @@
+
+* introduction
+
+Build out a complete golang project that is a json RPC server that listens on a local unix
+socket and responds to json RPC function calls.
+
+It should have serveral functions:
+
+** run
+Takes a full string as input and runs a bash shell with the argument as "-c", it waits
+until the shell exits and then returns all the outputs, both stdout and stderr as to
+return values, it also returns the exit code. This is a blocking call until the shell
+exits.
+
+** background
+Takes a full string as input and immediatly return a unique id. In the background it runs
+a bash shell with the argument as "-c", it collects the stdout and stderr and any exit
+codes. This is a non-blocking call.
+
+** status
+Takes a unique id returned earlier by 'background' and returns that executions status,
+wether it is still running or has exited or errored, and the time it has been executing in
+seconds.
+
+** output
+Takes a unique id returned earlier by 'background' and returns any outputs from stdout and
+stderr.
