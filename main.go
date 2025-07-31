@@ -24,6 +24,7 @@ type BackgroundJob struct {
 	Stdout    bytes.Buffer
 	Stderr    bytes.Buffer
 	StartTime time.Time
+	EndTime   time.Time
 	Status    string // "running", "exited", "errored"
 	ExitCode  int
 }
@@ -95,6 +96,7 @@ func (s *ShellRunner) Background(cmd string, reply *string) error {
 		mutex.Lock()
 		defer mutex.Unlock()
 
+		job.EndTime = time.Now()
 		if err != nil {
 			if exitError, ok := err.(*exec.ExitError); ok {
 				job.ExitCode = exitError.ExitCode()
@@ -126,7 +128,15 @@ func (s *ShellRunner) Status(id string, reply *map[string]interface{}) error {
 	}
 
 	(*reply)["status"] = job.Status
-	(*reply)["execution_time_seconds"] = time.Since(job.StartTime).Seconds()
+	(*reply)["start_time"] = job.StartTime.Format(time.RFC3339)
+
+	var duration float64
+	if job.Status == "running" {
+		duration = time.Since(job.StartTime).Seconds()
+	} else {
+		duration = job.EndTime.Sub(job.StartTime).Seconds()
+	}
+	(*reply)["duration_seconds"] = duration
 
 	return nil
 }

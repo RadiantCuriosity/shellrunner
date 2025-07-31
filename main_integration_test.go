@@ -90,6 +90,12 @@ func TestIntegrationBackgroundWorkflow(t *testing.T) {
 	if statusReply["status"] != "running" {
 		t.Errorf("expected status to be 'running', got %q", statusReply["status"])
 	}
+	if _, ok := statusReply["start_time"]; !ok {
+		t.Error("expected status reply to have 'start_time'")
+	}
+	if _, ok := statusReply["duration_seconds"]; !ok {
+		t.Error("expected status reply to have 'duration_seconds'")
+	}
 
 	// 3. Wait for it to finish.
 	time.Sleep(400 * time.Millisecond)
@@ -98,6 +104,9 @@ func TestIntegrationBackgroundWorkflow(t *testing.T) {
 	finalStatusReply := runClient(t, "status", jobID)
 	if finalStatusReply["status"] != "exited" {
 		t.Errorf("expected status to be 'exited', got %q", finalStatusReply["status"])
+	}
+	if duration, ok := finalStatusReply["duration_seconds"].(float64); !ok || duration < 0.3 {
+		t.Errorf("expected duration to be at least 0.3, got %v", duration)
 	}
 
 	// 5. Check the output.

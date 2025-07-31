@@ -18,9 +18,9 @@ a bash shell with the argument as "-c", it collects the stdout and stderr and an
 codes. This is a non-blocking call.
 
 ** status
-Takes a unique id returned earlier by 'background' and returns that executions status,
-wether it is still running or has exited or errored, and the time it has been executing in
-seconds.
+Takes a unique id returned earlier by 'background' and returns that execution's status,
+whether it is still running or has exited or errored. It also returns the start time
+(in RFC3339 format) and the duration of the execution in seconds.
 
 ** output
 Takes a unique id returned earlier by 'background' and returns any outputs from stdout and

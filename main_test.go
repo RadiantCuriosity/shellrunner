@@ -1,6 +1,8 @@
 package main
 
 import (
+	"io"
+	"log"
 	"testing"
 	"time"
 )
@@ -9,6 +11,7 @@ import (
 func setup(t *testing.T) {
 	t.Helper()
 	jobs = make(map[string]*BackgroundJob)
+	logger = log.New(io.Discard, "", 0)
 }
 
 // TestRun contains unit tests for the Run method.
@@ -126,6 +129,12 @@ func TestStatus(t *testing.T) {
 	if reply["status"] != "running" {
 		t.Errorf("expected status to be 'running', got %s", reply["status"])
 	}
+	if _, ok := reply["start_time"]; !ok {
+		t.Error("expected status reply to have 'start_time'")
+	}
+	if _, ok := reply["duration_seconds"]; !ok {
+		t.Error("expected status reply to have 'duration_seconds'")
+	}
 
 	time.Sleep(300 * time.Millisecond)
 
@@ -136,8 +145,8 @@ func TestStatus(t *testing.T) {
 	if reply["status"] != "exited" {
 		t.Errorf("expected status to be 'exited', got %s", reply["status"])
 	}
-	if reply["execution_time_seconds"].(float64) < 0.2 {
-		t.Errorf("expected execution time to be at least 0.2 seconds, got %f", reply["execution_time_seconds"])
+	if duration, ok := reply["duration_seconds"].(float64); !ok || duration < 0.2 {
+		t.Errorf("expected duration to be at least 0.2, got %v", duration)
 	}
 }
 
