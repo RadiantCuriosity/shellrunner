@@ -291,7 +291,7 @@ func TestList(t *testing.T) {
 	shellRunner := new(ShellRunner)
 
 	// 1. Test with no jobs
-	var reply []string
+	var reply []JobListEntry
 	err := shellRunner.List(struct{}{}, &reply)
 	if err != nil {
 		t.Fatalf("list failed: %v", err)
@@ -303,7 +303,8 @@ func TestList(t *testing.T) {
 	// 2. Test with a few jobs
 	var id1, id2 string
 	shellRunner.Background("sleep 1", &id1)
-	shellRunner.Background("sleep 1", &id2)
+	shellRunner.Background("echo 'done'", &id2)
+	time.Sleep(100 * time.Millisecond) // Allow second job to finish
 
 	err = shellRunner.List(struct{}{}, &reply)
 	if err != nil {
@@ -313,14 +314,20 @@ func TestList(t *testing.T) {
 		t.Errorf("expected 2 jobs, got %d", len(reply))
 	}
 
-	// Check if the returned IDs are correct
+	// Check if the returned IDs and statuses are correct
 	found1, found2 := false, false
-	for _, id := range reply {
-		if id == id1 {
+	for _, entry := range reply {
+		if entry.ID == id1 {
 			found1 = true
+			if entry.Status != "running" {
+				t.Errorf("expected job %s to be running, got %s", id1, entry.Status)
+			}
 		}
-		if id == id2 {
+		if entry.ID == id2 {
 			found2 = true
+			if entry.Status != "exited" {
+				t.Errorf("expected job %s to be exited, got %s", id2, entry.Status)
+			}
 		}
 	}
 	if !found1 || !found2 {

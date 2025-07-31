@@ -35,7 +35,8 @@ garbage collected.
 Releases all finished jobs from memory.
 
 ** list
-Returns a list of all job IDs currently in memory.
+Returns a list of all jobs currently in memory, with each job represented by its ID and
+current status.
 
 ** statistics
 Returns statistics about all commands executed since the server started, including the
@@ -80,7 +81,7 @@ The available methods are:
 - `output <job_id> [--release]`: Retrieves the output of a background job. If `--release` is specified, the job's resources are freed after retrieval.
 - `release <job_id>`: Releases the resources for a completed job.
 - `release-all`: Releases all finished jobs.
-- `list`: Lists the IDs of all jobs currently in memory.
+- `list`: Lists the ID and status of all jobs currently in memory.
 - `statistics`: Retrieves execution statistics.
 
 **** Examples

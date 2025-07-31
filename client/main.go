@@ -90,7 +90,10 @@ func main() {
 		callErr = c.Call("ShellRunner.Release", os.Args[2], &reply)
 		result = map[string]bool{"released": reply}
 	case "list":
-		var reply []string
+		var reply []struct {
+			ID     string
+			Status string
+		}
 		callErr = c.Call("ShellRunner.List", struct{}{}, &reply)
 		result = reply
 	case "release-all":

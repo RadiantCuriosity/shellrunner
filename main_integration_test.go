@@ -189,12 +189,11 @@ func TestIntegrationList(t *testing.T) {
 	// 1. Start a couple of jobs
 	bgReply1 := runClient(t, "background", `sleep 1`)
 	jobID1, _ := bgReply1["job_id"].(string)
-	bgReply2 := runClient(t, "background", `sleep 1`)
+	bgReply2 := runClient(t, "background", `echo "done"`)
 	jobID2, _ := bgReply2["job_id"].(string)
+	time.Sleep(100 * time.Millisecond) // Allow second job to finish
 
 	// 2. List the jobs
-	// The output of the client for a list is not a map, but a JSON array.
-	// We need to handle this differently.
 	cmdArgs := append([]string{"run", "client/main.go"}, "list")
 	cmd := exec.Command("go", cmdArgs...)
 	out, err := cmd.Output()
@@ -202,22 +201,31 @@ func TestIntegrationList(t *testing.T) {
 		t.Fatalf("client command failed: %v", err)
 	}
 
-	var ids []string
-	if err := json.Unmarshal(out, &ids); err != nil {
+	var list []struct {
+		ID     string
+		Status string
+	}
+	if err := json.Unmarshal(out, &list); err != nil {
 		t.Fatalf("failed to unmarshal list output: %v", err)
 	}
 
-	if len(ids) != 2 {
-		t.Errorf("expected 2 jobs in the list, got %d", len(ids))
+	if len(list) != 2 {
+		t.Errorf("expected 2 jobs in the list, got %d", len(list))
 	}
 
 	found1, found2 := false, false
-	for _, id := range ids {
-		if id == jobID1 {
+	for _, entry := range list {
+		if entry.ID == jobID1 {
 			found1 = true
+			if entry.Status != "running" {
+				t.Errorf("expected job %s to be running, got %s", jobID1, entry.Status)
+			}
 		}
-		if id == jobID2 {
+		if entry.ID == jobID2 {
 			found2 = true
+			if entry.Status != "exited" {
+				t.Errorf("expected job %s to be exited, got %s", jobID2, entry.Status)
+			}
 		}
 	}
 	if !found1 || !found2 {
@@ -251,16 +259,19 @@ func TestIntegrationReleaseAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("client command failed: %v", err)
 	}
-	var ids []string
-	if err := json.Unmarshal(out, &ids); err != nil {
+	var list []struct {
+		ID     string
+		Status string
+	}
+	if err := json.Unmarshal(out, &list); err != nil {
 		t.Fatalf("failed to unmarshal list output: %v", err)
 	}
 
-	if len(ids) != 1 {
-		t.Fatalf("expected 1 job to remain, got %d", len(ids))
+	if len(list) != 1 {
+		t.Fatalf("expected 1 job to remain, got %d", len(list))
 	}
-	if ids[0] != jobID2 {
-		t.Errorf("expected remaining job to be %s, got %s", jobID2, ids[0])
+	if list[0].ID != jobID2 {
+		t.Errorf("expected remaining job to be %s, got %s", jobID2, list[0].ID)
 	}
 
 	// 5. Clean up the remaining job

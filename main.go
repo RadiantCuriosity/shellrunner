@@ -257,18 +257,24 @@ func (s *ShellRunner) ReleaseAll(args struct{}, reply *int) error {
 	return nil
 }
 
-// List returns a list of all job IDs.
-func (s *ShellRunner) List(args struct{}, reply *[]string) error {
+// JobListEntry represents a single entry in the list of jobs.
+type JobListEntry struct {
+	ID     string
+	Status string
+}
+
+// List returns a list of all jobs and their statuses.
+func (s *ShellRunner) List(args struct{}, reply *[]JobListEntry) error {
 	logger.Printf("List called")
 	mutex.Lock()
 	defer mutex.Unlock()
 
-	ids := make([]string, 0, len(jobs))
-	for id := range jobs {
-		ids = append(ids, id)
+	list := make([]JobListEntry, 0, len(jobs))
+	for id, job := range jobs {
+		list = append(list, JobListEntry{ID: id, Status: job.Status})
 	}
 
-	*reply = ids
+	*reply = list
 	return nil
 }
 
