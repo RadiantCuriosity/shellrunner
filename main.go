@@ -3,6 +3,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -148,8 +149,12 @@ func (s *ShellRunner) Output(id string, reply *map[string]interface{}) error {
 }
 
 func main() {
+	// Setup command-line flags.
+	logging := flag.Bool("logging", false, "Enable logging to stdout.")
+	flag.Parse()
+
 	// Setup logging.
-	if os.Getenv("SHELLRUNNER_LOGGING") == "true" {
+	if *logging || os.Getenv("SHELLRUNNER_LOGGING") == "true" {
 		logger = log.New(os.Stdout, "[shellrunner] ", log.LstdFlags)
 	} else {
 		// Discard logs if not enabled.

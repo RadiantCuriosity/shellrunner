@@ -80,8 +80,14 @@ go run client/main.go output "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 #+end_src
 
 *** Logging
-The server includes optional logging to stdout. To enable it, set the `SHELLRUNNER_LOGGING` environment variable to `true` before running the server.
+The server includes optional logging to stdout. To enable it, you can either use the `-logging` command-line flag or set the `SHELLRUNNER_LOGGING` environment variable to `true`.
 
+Using the flag:
+#+begin_src sh
+./shellrunner -logging
+#+end_src
+
+Using the environment variable:
 #+begin_src sh
 SHELLRUNNER_LOGGING=true ./shellrunner
 #+end_src
