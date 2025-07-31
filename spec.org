@@ -25,3 +25,27 @@ seconds.
 ** output
 Takes a unique id returned earlier by 'background' and returns any outputs from stdout and
 stderr.
+
+* Project Status
+
+This project is complete and fully functional.
+
+*** Building the project
+To build the project, run the following command:
+#+begin_src sh
+go build
+#+end_src
+
+*** Testing the project
+To run the unit tests, run the following command:
+#+begin_src sh
+go test -v
+#+end_src
+
+*** Running the server
+To run the server, execute the following command:
+#+begin_src sh
+./shellrunner
+#+end_src
+
+The server will listen on a unix socket at `/tmp/shellrunner.sock`.
