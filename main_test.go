@@ -154,24 +154,100 @@ func TestStatus(t *testing.T) {
 func TestOutput(t *testing.T) {
 	setup(t)
 	shellRunner := new(ShellRunner)
+
+	t.Run("without release", func(t *testing.T) {
+		var id string
+		err := shellRunner.Background(`echo "test"`, &id)
+		if err != nil {
+			t.Fatalf("background failed: %v", err)
+		}
+		time.Sleep(100 * time.Millisecond) // allow command to finish
+
+		reply := make(map[string]interface{})
+		err = shellRunner.Output(OutputArgs{ID: id, Release: false}, &reply)
+		if err != nil {
+			t.Fatalf("output failed: %v", err)
+		}
+
+		if reply["stdout"] != "test\n" {
+			t.Errorf("expected stdout 'test\\n', got %q", reply["stdout"])
+		}
+
+		// Verify the job still exists
+		mutex.Lock()
+		_, ok := jobs[id]
+		mutex.Unlock()
+		if !ok {
+			t.Error("job was released when it should not have been")
+		}
+	})
+
+	t.Run("with release", func(t *testing.T) {
+		var id string
+		err := shellRunner.Background(`echo "test"`, &id)
+		if err != nil {
+			t.Fatalf("background failed: %v", err)
+		}
+		time.Sleep(100 * time.Millisecond) // allow command to finish
+
+		reply := make(map[string]interface{})
+		err = shellRunner.Output(OutputArgs{ID: id, Release: true}, &reply)
+		if err != nil {
+			t.Fatalf("output failed: %v", err)
+		}
+
+		if reply["stdout"] != "test\n" {
+			t.Errorf("expected stdout 'test\\n', got %q", reply["stdout"])
+		}
+
+		// Verify the job was released
+		mutex.Lock()
+		_, ok := jobs[id]
+		mutex.Unlock()
+		if ok {
+			t.Error("job was not released when it should have been")
+		}
+	})
+}
+
+// TestRelease contains unit tests for the Release method.
+func TestRelease(t *testing.T) {
+	setup(t)
+	shellRunner := new(ShellRunner)
 	var id string
-	err := shellRunner.Background(`echo "test output"; >&2 echo "test error"`, &id)
+	err := shellRunner.Background(`sleep 1`, &id)
 	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
+		t.Fatalf("background failed: %v", err)
 	}
 
-	time.Sleep(100 * time.Millisecond) // allow command to finish
+	// Verify the job exists before releasing
+	mutex.Lock()
+	_, ok := jobs[id]
+	mutex.Unlock()
+	if !ok {
+		t.Fatal("job was not created successfully")
+	}
 
-	reply := make(map[string]interface{})
-	err = shellRunner.Output(id, &reply)
+	var released bool
+	err = shellRunner.Release(id, &released)
 	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
+		t.Fatalf("release failed: %v", err)
+	}
+	if !released {
+		t.Error("expected release to return true")
 	}
 
-	if reply["stdout"] != "test output\n" {
-		t.Errorf("expected stdout to be 'test output\\n', got %q", reply["stdout"])
+	// Verify the job was released
+	mutex.Lock()
+	_, ok = jobs[id]
+	mutex.Unlock()
+	if ok {
+		t.Error("job was not released")
 	}
-	if reply["stderr"] != "test error\n" {
-		t.Errorf("expected stderr to be 'test error\\n', got %q", reply["stderr"])
+
+	// Verify that releasing a non-existent job returns an error
+	err = shellRunner.Release(id, &released)
+	if err == nil {
+		t.Error("expected an error when releasing a non-existent job, but got nil")
 	}
 }

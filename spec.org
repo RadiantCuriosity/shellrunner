@@ -24,7 +24,11 @@ whether it is still running or has exited or errored. It also returns the start 
 
 ** output
 Takes a unique id returned earlier by 'background' and returns any outputs from stdout and
-stderr.
+stderr. It can optionally release the job's resources after returning the output.
+
+** release
+Takes a unique id and removes the corresponding job's data from memory, allowing it to be
+garbage collected.
 
 * Project Status
 
@@ -62,7 +66,8 @@ The available methods are:
 - `run <command>`: Executes a command and waits for it to finish.
 - `background <command>`: Executes a command in the background and returns a job ID.
 - `status <job_id>`: Checks the status of a background job.
-- `output <job_id>`: Retrieves the output of a background job.
+- `output <job_id> [--release]`: Retrieves the output of a background job. If `--release` is specified, the job's resources are freed after retrieval.
+- `release <job_id>`: Releases the resources for a completed job.
 
 **** Examples
 #+begin_src sh
@@ -75,8 +80,11 @@ go run client/main.go background "sleep 5; echo 'done'"
 # Check the status of a job (replace with a real job_id)
 go run client/main.go status "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 
-# Get the output of a job (replace with a real job_id)
-go run client/main.go output "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+# Get the output of a job and release it (replace with a real job_id)
+go run client/main.go output "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" --release
+
+# Release a job's resources manually (replace with a real job_id)
+go run client/main.go release "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 #+end_src
 
 *** Logging

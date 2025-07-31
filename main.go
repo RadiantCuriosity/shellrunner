@@ -141,20 +141,47 @@ func (s *ShellRunner) Status(id string, reply *map[string]interface{}) error {
 	return nil
 }
 
+// OutputArgs defines the arguments for the Output method.
+type OutputArgs struct {
+	ID      string
+	Release bool
+}
+
 // Output returns the stdout and stderr of a background job.
-func (s *ShellRunner) Output(id string, reply *map[string]interface{}) error {
-	logger.Printf("Output called for job ID: %s", id)
+func (s *ShellRunner) Output(args OutputArgs, reply *map[string]interface{}) error {
+	logger.Printf("Output called for job ID: %s, Release: %t", args.ID, args.Release)
 	mutex.Lock()
 	defer mutex.Unlock()
 
-	job, ok := jobs[id]
+	job, ok := jobs[args.ID]
 	if !ok {
-		return fmt.Errorf("job with id %s not found", id)
+		return fmt.Errorf("job with id %s not found", args.ID)
 	}
 
 	(*reply)["stdout"] = job.Stdout.String()
 	(*reply)["stderr"] = job.Stderr.String()
 
+	if args.Release {
+		logger.Printf("Releasing job %s", args.ID)
+		delete(jobs, args.ID)
+	}
+
+	return nil
+}
+
+// Release removes a job's data from memory.
+func (s *ShellRunner) Release(id string, reply *bool) error {
+	logger.Printf("Release called for job ID: %s", id)
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	if _, ok := jobs[id]; !ok {
+		return fmt.Errorf("job with id %s not found", id)
+	}
+
+	delete(jobs, id)
+	*reply = true
+	logger.Printf("Released job %s", id)
 	return nil
 }
 

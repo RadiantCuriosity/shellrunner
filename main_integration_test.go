@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -109,9 +110,48 @@ func TestIntegrationBackgroundWorkflow(t *testing.T) {
 		t.Errorf("expected duration to be at least 0.3, got %v", duration)
 	}
 
-	// 5. Check the output.
-	outputReply := runClient(t, "output", jobID)
+	// 5. Check the output and release the job.
+	outputReply := runClient(t, "output", jobID, "--release")
 	if outputReply["stdout"] != "workflow done\n" {
 		t.Errorf("expected stdout 'workflow done\\n', got %q", outputReply["stdout"])
+	}
+
+	// 6. Verify the job was released by checking its status again.
+	// The client should fail because the job doesn't exist.
+	cmdArgs := append([]string{"run", "client/main.go"}, "status", jobID)
+	cmd := exec.Command("go", cmdArgs...)
+	_, err := cmd.Output()
+	if err == nil {
+		t.Fatalf("expected client command to fail for released job, but it succeeded")
+	}
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		if !strings.Contains(string(exitErr.Stderr), "not found") {
+			t.Errorf("expected error message to contain 'not found', got %q", string(exitErr.Stderr))
+		}
+	} else {
+		t.Fatalf("unexpected error type: %v", err)
+	}
+}
+
+func TestIntegrationRelease(t *testing.T) {
+	// 1. Start a background job.
+	bgReply := runClient(t, "background", `sleep 1`)
+	jobID, ok := bgReply["job_id"].(string)
+	if !ok || jobID == "" {
+		t.Fatalf("did not get a valid job_id from background command: %v", bgReply)
+	}
+
+	// 2. Release the job.
+	releaseReply := runClient(t, "release", jobID)
+	if released, ok := releaseReply["released"].(bool); !ok || !released {
+		t.Errorf("expected release to be successful, got %v", releaseReply)
+	}
+
+	// 3. Verify the job was released.
+	cmdArgs := append([]string{"run", "client/main.go"}, "status", jobID)
+	cmd := exec.Command("go", cmdArgs...)
+	_, err := cmd.Output()
+	if err == nil {
+		t.Fatalf("expected client command to fail for released job, but it succeeded")
 	}
 }

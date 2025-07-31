@@ -10,11 +10,17 @@ import (
 	"os"
 )
 
+// OutputArgs matches the server's argument struct for the Output method.
+type OutputArgs struct {
+	ID      string
+	Release bool
+}
+
 func main() {
 	// Basic command-line argument validation.
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: go run client/main.go <method> [args...]")
-		fmt.Println("Methods: run, background, status, output")
+		fmt.Println("Methods: run, background, status, output, release")
 		return
 	}
 
@@ -57,11 +63,22 @@ func main() {
 		result = reply
 	case "output":
 		if len(os.Args) < 3 {
-			log.Fatal("Usage: go run client/main.go output <job_id>")
+			log.Fatal("Usage: go run client/main.go output <job_id> [--release]")
+		}
+		args := OutputArgs{ID: os.Args[2]}
+		if len(os.Args) > 3 && os.Args[3] == "--release" {
+			args.Release = true
 		}
 		var reply map[string]interface{}
-		callErr = c.Call("ShellRunner.Output", os.Args[2], &reply)
+		callErr = c.Call("ShellRunner.Output", args, &reply)
 		result = reply
+	case "release":
+		if len(os.Args) < 3 {
+			log.Fatal("Usage: go run client/main.go release <job_id>")
+		}
+		var reply bool
+		callErr = c.Call("ShellRunner.Release", os.Args[2], &reply)
+		result = map[string]bool{"released": reply}
 	default:
 		log.Fatalf("Unknown method: %s", method)
 	}
