@@ -114,8 +114,9 @@ func TestBackground(t *testing.T) {
 func TestStatus(t *testing.T) {
 	setup(t)
 	shellRunner := new(ShellRunner)
+	command := "sleep 0.2"
 	var id string
-	err := shellRunner.Background(`sleep 0.2`, &id)
+	err := shellRunner.Background(command, &id)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -128,6 +129,9 @@ func TestStatus(t *testing.T) {
 
 	if reply["status"] != "running" {
 		t.Errorf("expected status to be 'running', got %s", reply["status"])
+	}
+	if reply["command"] != command {
+		t.Errorf("expected command to be %q, got %q", command, reply["command"])
 	}
 	if _, ok := reply["start_time"]; !ok {
 		t.Error("expected status reply to have 'start_time'")
@@ -249,5 +253,48 @@ func TestRelease(t *testing.T) {
 	err = shellRunner.Release(id, &released)
 	if err == nil {
 		t.Error("expected an error when releasing a non-existent job, but got nil")
+	}
+}
+
+// TestList contains unit tests for the List method.
+func TestList(t *testing.T) {
+	setup(t)
+	shellRunner := new(ShellRunner)
+
+	// 1. Test with no jobs
+	var reply []string
+	err := shellRunner.List(struct{}{}, &reply)
+	if err != nil {
+		t.Fatalf("list failed: %v", err)
+	}
+	if len(reply) != 0 {
+				t.Errorf("expected 0 jobs, got %d", len(reply))
+	}
+
+	// 2. Test with a few jobs
+	var id1, id2 string
+	shellRunner.Background("sleep 1", &id1)
+	shellRunner.Background("sleep 1", &id2)
+
+	err = shellRunner.List(struct{}{}, &reply)
+	if err != nil {
+		t.Fatalf("list failed: %v", err)
+	}
+	if len(reply) != 2 {
+		t.Errorf("expected 2 jobs, got %d", len(reply))
+	}
+
+	// Check if the returned IDs are correct
+	found1, found2 := false, false
+	for _, id := range reply {
+		if id == id1 {
+			found1 = true
+		}
+		if id == id2 {
+			found2 = true
+		}
+	}
+	if !found1 || !found2 {
+		t.Errorf("did not find all job IDs in list reply")
 	}
 }

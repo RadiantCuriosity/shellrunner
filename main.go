@@ -20,6 +20,7 @@ import (
 
 // BackgroundJob represents a command running in the background.
 type BackgroundJob struct {
+	Command   string
 	Cmd       *exec.Cmd
 	Stdout    bytes.Buffer
 	Stderr    bytes.Buffer
@@ -80,6 +81,7 @@ func (s *ShellRunner) Background(cmd string, reply *string) error {
 	command := exec.Command("bash", "-c", cmd)
 
 	job := &BackgroundJob{
+		Command:   cmd,
 		Cmd:       command,
 		StartTime: time.Now(),
 		Status:    "running",
@@ -127,6 +129,7 @@ func (s *ShellRunner) Status(id string, reply *map[string]interface{}) error {
 		return fmt.Errorf("job with id %s not found", id)
 	}
 
+	(*reply)["command"] = job.Command
 	(*reply)["status"] = job.Status
 	(*reply)["start_time"] = job.StartTime.Format(time.RFC3339)
 
@@ -182,6 +185,21 @@ func (s *ShellRunner) Release(id string, reply *bool) error {
 	delete(jobs, id)
 	*reply = true
 	logger.Printf("Released job %s", id)
+	return nil
+}
+
+// List returns a list of all job IDs.
+func (s *ShellRunner) List(args struct{}, reply *[]string) error {
+	logger.Printf("List called")
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	ids := make([]string, 0, len(jobs))
+	for id := range jobs {
+		ids = append(ids, id)
+	}
+
+	*reply = ids
 	return nil
 }
 

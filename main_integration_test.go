@@ -80,7 +80,8 @@ func TestIntegrationRun(t *testing.T) {
 // TestIntegrationBackgroundWorkflow tests the full asynchronous workflow.
 func TestIntegrationBackgroundWorkflow(t *testing.T) {
 	// 1. Start a background job.
-	bgReply := runClient(t, "background", `sleep 0.3; echo "workflow done"`)
+	command := `sleep 0.3; echo "workflow done"`
+	bgReply := runClient(t, "background", command)
 	jobID, ok := bgReply["job_id"].(string)
 	if !ok || jobID == "" {
 		t.Fatalf("did not get a valid job_id from background command: %v", bgReply)
@@ -90,6 +91,9 @@ func TestIntegrationBackgroundWorkflow(t *testing.T) {
 	statusReply := runClient(t, "status", jobID)
 	if statusReply["status"] != "running" {
 		t.Errorf("expected status to be 'running', got %q", statusReply["status"])
+	}
+	if statusReply["command"] != command {
+		t.Errorf("expected command to be %q, got %q", command, statusReply["command"])
 	}
 	if _, ok := statusReply["start_time"]; !ok {
 		t.Error("expected status reply to have 'start_time'")
@@ -154,4 +158,48 @@ func TestIntegrationRelease(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected client command to fail for released job, but it succeeded")
 	}
+}
+
+func TestIntegrationList(t *testing.T) {
+	// 1. Start a couple of jobs
+	bgReply1 := runClient(t, "background", `sleep 1`)
+	jobID1, _ := bgReply1["job_id"].(string)
+	bgReply2 := runClient(t, "background", `sleep 1`)
+	jobID2, _ := bgReply2["job_id"].(string)
+
+	// 2. List the jobs
+	// The output of the client for a list is not a map, but a JSON array.
+	// We need to handle this differently.
+	cmdArgs := append([]string{"run", "client/main.go"}, "list")
+	cmd := exec.Command("go", cmdArgs...)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("client command failed: %v", err)
+	}
+
+	var ids []string
+	if err := json.Unmarshal(out, &ids); err != nil {
+		t.Fatalf("failed to unmarshal list output: %v", err)
+	}
+
+	if len(ids) != 2 {
+		t.Errorf("expected 2 jobs in the list, got %d", len(ids))
+	}
+
+	found1, found2 := false, false
+	for _, id := range ids {
+		if id == jobID1 {
+			found1 = true
+		}
+		if id == jobID2 {
+			found2 = true
+		}
+	}
+	if !found1 || !found2 {
+		t.Errorf("did not find all job IDs in list reply")
+	}
+
+	// 3. Clean up by releasing the jobs
+	runClient(t, "release", jobID1)
+	runClient(t, "release", jobID2)
 }
