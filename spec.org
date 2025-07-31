@@ -49,3 +49,32 @@ To run the server, execute the following command:
 #+end_src
 
 The server will listen on a unix socket at `/tmp/shellrunner.sock`.
+
+*** Client Usage
+A test client is provided in the `client/` directory.
+
+To use the client, run the following command from the project root:
+#+begin_src sh
+go run client/main.go <method> [args...]
+#+end_src
+
+The available methods are:
+- `run <command>`: Executes a command and waits for it to finish.
+- `background <command>`: Executes a command in the background and returns a job ID.
+- `status <job_id>`: Checks the status of a background job.
+- `output <job_id>`: Retrieves the output of a background job.
+
+**** Examples
+#+begin_src sh
+# Run a command synchronously
+go run client/main.go run "ls -l"
+
+# Start a background job
+go run client/main.go background "sleep 5; echo 'done'"
+
+# Check the status of a job (replace with a real job_id)
+go run client/main.go status "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# Get the output of a job (replace with a real job_id)
+go run client/main.go output "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+#+end_src
