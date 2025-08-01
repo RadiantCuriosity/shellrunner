@@ -305,3 +305,30 @@ func TestIntegrationStatistics(t *testing.T) {
 		t.Errorf("expected total_count to increase, but it did not")
 	}
 }
+
+func TestIntegrationSince(t *testing.T) {
+	// 1. Start a background job that produces output over time
+	bgReply := runClient(t, "background", "echo 'part 1'; sleep 0.3; echo 'part 2'")
+	jobID, _ := bgReply["job_id"].(string)
+
+	// 2. Wait for the first part of the output
+	time.Sleep(100 * time.Millisecond)
+
+	// 3. Call 'since' for the first time
+	sinceReply1 := runClient(t, "since", jobID)
+	if sinceReply1["stdout"] != "part 1\n" {
+		t.Errorf("expected first since stdout to be 'part 1\\n', got %q", sinceReply1["stdout"])
+	}
+
+	// 4. Wait for the second part of the output
+	time.Sleep(300 * time.Millisecond)
+
+	// 5. Call 'since' for the second time
+	sinceReply2 := runClient(t, "since", jobID)
+	if sinceReply2["stdout"] != "part 2\n" {
+		t.Errorf("expected second since stdout to be 'part 2\\n', got %q", sinceReply2["stdout"])
+	}
+
+	// 6. Clean up
+	runClient(t, "release", jobID)
+}

@@ -93,6 +93,10 @@ The server exposes a set of methods that can be called via JSON-RPC 2.0.
   - **Params**: `{}`
   - **Result**: `{"total_count": 0, "average_duration_seconds": 0.0, "max_duration_seconds": 0.0}`
 
+- **`ShellRunner.Since`**: Retrieves incremental output from a job.
+  - **Params**: `"<job_id>"`
+  - **Result**: `{"stdout": "...", "stderr": "..."}`
+
 ## Go Client
 
 A command-line client is provided in the `client/` directory.
@@ -113,6 +117,7 @@ go run client/main.go <method> [args...]
 - `release-all`: Releases all finished jobs.
 - `list`: Lists all jobs.
 - `statistics`: Shows server statistics.
+- `since <job_id>`: Retrieves new output from a job since the last read.
 
 ### Examples
 

@@ -42,6 +42,11 @@ current status.
 Returns statistics about all commands executed since the server started, including the
 total count, average duration, and maximum duration.
 
+** since
+Takes a unique id and returns any new stdout and stderr output since the last time
+'since' or 'output' was called for that ID. The first call returns all output since
+the job started.
+
 * Project Status
 
 This project is complete and fully functional.

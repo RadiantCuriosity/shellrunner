@@ -18,14 +18,16 @@ import (
 
 // BackgroundJob represents a command running in the background.
 type BackgroundJob struct {
-	Command   string
-	Cmd       *exec.Cmd
-	Stdout    bytes.Buffer
-	Stderr    bytes.Buffer
-	StartTime time.Time
-	EndTime   time.Time
-	Status    string // "running", "exited", "errored"
-	ExitCode  int
+	Command      string
+	Cmd          *exec.Cmd
+	Stdout       bytes.Buffer
+	Stderr       bytes.Buffer
+	StartTime    time.Time
+	EndTime      time.Time
+	Status       string // "running", "exited", "errored"
+	ExitCode     int
+	StdoutOffset int
+	StderrOffset int
 }
 
 // ExecutionStatistics holds statistics about command executions.
@@ -292,6 +294,34 @@ func (s *ShellRunner) Statistics(args struct{}, reply *map[string]interface{}) e
 	(*reply)["total_count"] = stats.TotalCount
 	(*reply)["average_duration_seconds"] = avgDuration
 	(*reply)["max_duration_seconds"] = stats.MaxDuration.Seconds()
+
+	return nil
+}
+
+// Since returns the output of a job since the last time it was called.
+func (s *ShellRunner) Since(id string, reply *map[string]interface{}) error {
+	logger.Printf("Since called for job ID: %s", id)
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	job, ok := jobs[id]
+	if !ok {
+		return fmt.Errorf("job with id %s not found", id)
+	}
+
+	// Read new output from the buffers
+	stdout := job.Stdout.Bytes()
+	stderr := job.Stderr.Bytes()
+
+	newStdout := string(stdout[job.StdoutOffset:])
+	newStderr := string(stderr[job.StderrOffset:])
+
+	// Update offsets
+	job.StdoutOffset = len(stdout)
+	job.StderrOffset = len(stderr)
+
+	(*reply)["stdout"] = newStdout
+	(*reply)["stderr"] = newStderr
 
 	return nil
 }

@@ -335,6 +335,50 @@ func TestList(t *testing.T) {
 	}
 }
 
+// TestSince contains unit tests for the Since method.
+func TestSince(t *testing.T) {
+	setup(t)
+	shellRunner := new(ShellRunner)
+
+	var id string
+	// This command outputs "1", waits, then outputs "2".
+	shellRunner.Background("echo 1; sleep 0.2; echo 2", &id)
+
+	time.Sleep(100 * time.Millisecond) // Wait for the first output
+
+	// First call should get "1"
+	reply1 := make(map[string]interface{})
+	err := shellRunner.Since(id, &reply1)
+	if err != nil {
+		t.Fatalf("first since call failed: %v", err)
+	}
+	if reply1["stdout"] != "1\n" {
+		t.Errorf("expected first stdout to be '1\\n', got %q", reply1["stdout"])
+	}
+
+	time.Sleep(200 * time.Millisecond) // Wait for the second output
+
+	// Second call should get "2"
+	reply2 := make(map[string]interface{})
+	err = shellRunner.Since(id, &reply2)
+	if err != nil {
+		t.Fatalf("second since call failed: %v", err)
+	}
+	if reply2["stdout"] != "2\n" {
+		t.Errorf("expected second stdout to be '2\\n', got %q", reply2["stdout"])
+	}
+
+	// Third call should get nothing
+	reply3 := make(map[string]interface{})
+	err = shellRunner.Since(id, &reply3)
+	if err != nil {
+		t.Fatalf("third since call failed: %v", err)
+	}
+	if reply3["stdout"] != "" {
+		t.Errorf("expected third stdout to be empty, got %q", reply3["stdout"])
+	}
+}
+
 // TestStatistics contains unit tests for the Statistics method.
 func TestStatistics(t *testing.T) {
 	setup(t)

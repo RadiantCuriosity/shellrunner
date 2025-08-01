@@ -104,6 +104,13 @@ func main() {
 		var reply map[string]interface{}
 		callErr = c.Call("ShellRunner.Statistics", struct{}{}, &reply)
 		result = reply
+	case "since":
+		if len(os.Args) < 3 {
+			log.Fatal("Usage: go run client/main.go since <job_id>")
+		}
+		var reply map[string]interface{}
+		callErr = c.Call("ShellRunner.Since", os.Args[2], &reply)
+		result = reply
 	default:
 		log.Fatalf("Unknown method: %s", method)
 	}
