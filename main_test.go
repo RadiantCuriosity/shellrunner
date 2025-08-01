@@ -355,10 +355,13 @@ func TestSince(t *testing.T) {
 	if reply1["stdout"] != "1\n" {
 		t.Errorf("expected first stdout to be '1\\n', got %q", reply1["stdout"])
 	}
+	if _, ok := reply1["status"]; ok {
+		t.Error("did not expect status on first call for running job")
+	}
 
 	time.Sleep(200 * time.Millisecond) // Wait for the second output
 
-	// Second call should get "2"
+	// Second call should get "2" and the final status
 	reply2 := make(map[string]interface{})
 	err = shellRunner.Since(id, &reply2)
 	if err != nil {
@@ -367,8 +370,14 @@ func TestSince(t *testing.T) {
 	if reply2["stdout"] != "2\n" {
 		t.Errorf("expected second stdout to be '2\\n', got %q", reply2["stdout"])
 	}
+	if status, ok := reply2["status"].(string); !ok || status != "exited" {
+		t.Errorf("expected status to be 'exited', got %v", reply2["status"])
+	}
+	if code, ok := reply2["exit_code"].(int); !ok || code != 0 {
+		t.Errorf("expected exit_code to be 0, got %v", reply2["exit_code"])
+	}
 
-	// Third call should get nothing
+	// Third call should get nothing but still report the status
 	reply3 := make(map[string]interface{})
 	err = shellRunner.Since(id, &reply3)
 	if err != nil {
@@ -376,6 +385,9 @@ func TestSince(t *testing.T) {
 	}
 	if reply3["stdout"] != "" {
 		t.Errorf("expected third stdout to be empty, got %q", reply3["stdout"])
+	}
+	if status, ok := reply3["status"].(string); !ok || status != "exited" {
+		t.Errorf("expected status to be 'exited' on third call, got %v", reply3["status"])
 	}
 }
 

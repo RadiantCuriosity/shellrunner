@@ -323,6 +323,12 @@ func (s *ShellRunner) Since(id string, reply *map[string]interface{}) error {
 	(*reply)["stdout"] = newStdout
 	(*reply)["stderr"] = newStderr
 
+	// If the job is finished, include its status and exit code.
+	if job.Status == "exited" || job.Status == "errored" {
+		(*reply)["status"] = job.Status
+		(*reply)["exit_code"] = job.ExitCode
+	}
+
 	return nil
 }
 

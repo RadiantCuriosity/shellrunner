@@ -319,14 +319,20 @@ func TestIntegrationSince(t *testing.T) {
 	if sinceReply1["stdout"] != "part 1\n" {
 		t.Errorf("expected first since stdout to be 'part 1\\n', got %q", sinceReply1["stdout"])
 	}
+	if _, ok := sinceReply1["status"]; ok {
+		t.Error("did not expect status on first call for running job")
+	}
 
 	// 4. Wait for the second part of the output
 	time.Sleep(300 * time.Millisecond)
 
-	// 5. Call 'since' for the second time
+	// 5. Call 'since' for the second time, now it should be finished
 	sinceReply2 := runClient(t, "since", jobID)
 	if sinceReply2["stdout"] != "part 2\n" {
 		t.Errorf("expected second since stdout to be 'part 2\\n', got %q", sinceReply2["stdout"])
+	}
+	if status, ok := sinceReply2["status"].(string); !ok || status != "exited" {
+		t.Errorf("expected status to be 'exited', got %v", sinceReply2["status"])
 	}
 
 	// 6. Clean up

@@ -44,8 +44,8 @@ total count, average duration, and maximum duration.
 
 ** since
 Takes a unique id and returns any new stdout and stderr output since the last time
-'since' or 'output' was called for that ID. The first call returns all output since
-the job started.
+'since' was called for that ID. If the job has finished, it also returns the final
+status and exit code.
 
 * Project Status
 

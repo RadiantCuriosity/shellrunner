@@ -93,9 +93,9 @@ The server exposes a set of methods that can be called via JSON-RPC 2.0.
   - **Params**: `{}`
   - **Result**: `{"total_count": 0, "average_duration_seconds": 0.0, "max_duration_seconds": 0.0}`
 
-- **`ShellRunner.Since`**: Retrieves incremental output from a job.
+- **`ShellRunner.Since`**: Retrieves incremental output from a job. If the job is finished, the status and exit code are also returned.
   - **Params**: `"<job_id>"`
-  - **Result**: `{"stdout": "...", "stderr": "..."}`
+  - **Result**: `{"stdout": "...", "stderr": "...", "status": "exited", "exit_code": 0}`
 
 ## Go Client
 
