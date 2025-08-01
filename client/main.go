@@ -3,6 +3,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -23,15 +24,25 @@ type OutputArgs struct {
 }
 
 func main() {
+	// Define flags
+	socketPath := flag.String("socket", os.Getenv("SHELLRUNNER_SOCKET_PATH"), "Path to the Unix socket. Defaults to SHELLRUNNER_SOCKET_PATH env var.")
+	flag.Parse()
+
+	args := flag.Args()
+
 	// Basic command-line argument validation.
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: go run client/main.go <method> [args...]")
-		fmt.Println("Methods: run, background, status, output, release, list, release-all, statistics")
+	if len(args) < 1 {
+		fmt.Println("Usage: go run client/main.go [-socket /path/to/socket] <method> [args...]")
+		fmt.Println("Methods: run, background, status, output, release, list, release-all, statistics, since")
 		return
 	}
 
+	if *socketPath == "" {
+		log.Fatal("Error: -socket flag or SHELLRUNNER_SOCKET_PATH environment variable must be set.")
+	}
+
 	// Connect to the server's unix socket.
-	client, err := net.Dial("unix", "/tmp/shellrunner.sock")
+	client, err := net.Dial("unix", *socketPath)
 	if err != nil {
 		log.Fatal("dialing:", err)
 	}
@@ -40,54 +51,54 @@ func main() {
 	// Create a new JSON-RPC client.
 	c := jsonrpc.NewClient(client)
 
-	method := os.Args[1]
+	method := args[0]
 	var result interface{}
 	var callErr error
 
 	// Dispatch the RPC call based on the command-line arguments.
 	switch method {
 	case "run":
-		if len(os.Args) < 3 {
-			log.Fatal("Usage: go run client/main.go run <command> [--keep]")
+		if len(args) < 2 {
+			log.Fatal("Usage: ... run <command> [--keep]")
 		}
-		args := RunArgs{Command: os.Args[2]}
-		if len(os.Args) > 3 && os.Args[3] == "--keep" {
-			args.Keep = true
+		runArgs := RunArgs{Command: args[1]}
+		if len(args) > 2 && args[2] == "--keep" {
+			runArgs.Keep = true
 		}
 		var reply map[string]interface{}
-		callErr = c.Call("ShellRunner.Run", args, &reply)
+		callErr = c.Call("ShellRunner.Run", runArgs, &reply)
 		result = reply
 	case "background":
-		if len(os.Args) < 3 {
-			log.Fatal("Usage: go run client/main.go background <command>")
+		if len(args) < 2 {
+			log.Fatal("Usage: ... background <command>")
 		}
 		var reply string
-		callErr = c.Call("ShellRunner.Background", os.Args[2], &reply)
+		callErr = c.Call("ShellRunner.Background", args[1], &reply)
 		result = map[string]string{"job_id": reply}
 	case "status":
-		if len(os.Args) < 3 {
-			log.Fatal("Usage: go run client/main.go status <job_id>")
+		if len(args) < 2 {
+			log.Fatal("Usage: ... status <job_id>")
 		}
 		var reply map[string]interface{}
-		callErr = c.Call("ShellRunner.Status", os.Args[2], &reply)
+		callErr = c.Call("ShellRunner.Status", args[1], &reply)
 		result = reply
 	case "output":
-		if len(os.Args) < 3 {
-			log.Fatal("Usage: go run client/main.go output <job_id> [--release]")
+		if len(args) < 2 {
+			log.Fatal("Usage: ... output <job_id> [--release]")
 		}
-		args := OutputArgs{ID: os.Args[2]}
-		if len(os.Args) > 3 && os.Args[3] == "--release" {
-			args.Release = true
+		outputArgs := OutputArgs{ID: args[1]}
+		if len(args) > 2 && args[2] == "--release" {
+			outputArgs.Release = true
 		}
 		var reply map[string]interface{}
-		callErr = c.Call("ShellRunner.Output", args, &reply)
+		callErr = c.Call("ShellRunner.Output", outputArgs, &reply)
 		result = reply
 	case "release":
-		if len(os.Args) < 3 {
-			log.Fatal("Usage: go run client/main.go release <job_id>")
+		if len(args) < 2 {
+			log.Fatal("Usage: ... release <job_id>")
 		}
 		var reply bool
-		callErr = c.Call("ShellRunner.Release", os.Args[2], &reply)
+		callErr = c.Call("ShellRunner.Release", args[1], &reply)
 		result = map[string]bool{"released": reply}
 	case "list":
 		var reply []struct {
@@ -105,15 +116,16 @@ func main() {
 		callErr = c.Call("ShellRunner.Statistics", struct{}{}, &reply)
 		result = reply
 	case "since":
-		if len(os.Args) < 3 {
-			log.Fatal("Usage: go run client/main.go since <job_id>")
+		if len(args) < 2 {
+			log.Fatal("Usage: ... since <job_id>")
 		}
 		var reply map[string]interface{}
-		callErr = c.Call("ShellRunner.Since", os.Args[2], &reply)
+		callErr = c.Call("ShellRunner.Since", args[1], &reply)
 		result = reply
 	default:
 		log.Fatalf("Unknown method: %s", method)
 	}
+
 
 	if callErr != nil {
 		log.Fatalf("rpc error calling %s: %v", method, callErr)

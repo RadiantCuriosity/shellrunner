@@ -37,17 +37,26 @@ This will create a `shellrunner` executable in the project directory.
 
 ### Starting the Server
 
-To start the server, simply run the compiled binary:
+To start the server, run the compiled binary. The server will create a unique Unix socket in a temporary directory and print the full path to `stdout`.
 
 ```sh
 ./shellrunner
+/tmp/shellrunner-12345/shellrunner.sock
 ```
 
-The server will start and listen on a Unix socket at `/tmp/shellrunner.sock`.
+You can also specify a socket path using the `-socket` flag or the `SHELLRUNNER_SOCKET_PATH` environment variable.
+
+```sh
+# Using the flag
+./shellrunner -socket /tmp/my-app.sock
+
+# Using the environment variable
+SHELLRUNNER_SOCKET_PATH=/tmp/my-app.sock ./shellrunner
+```
 
 #### Logging
 
-You can enable logging to stdout using either the `-logging` flag or the `SHELLRUNNER_LOGGING` environment variable.
+You can enable logging to stdout using either the `-logging` flag or the `SHELLRUNNER_LOGGING` environment variable. Note that this will interleave log messages with the initial socket path output.
 
 ```sh
 # Using the flag
@@ -91,7 +100,7 @@ The server exposes a set of methods that can be called via JSON-RPC 2.0.
 
 - **`ShellRunner.Statistics`**: Retrieves server statistics.
   - **Params**: `{}`
-  - **Result**: `{"total_count": 0, "average_duration_seconds": 0.0, "max_duration_seconds": 0.0}`
+  - **Result**: `{"total_count": 0, "average_duration_seconds": 0.0, "max_duration_seconds": 0.0, "total_stdout_bytes": 0, "total_stderr_bytes": 0}`
 
 - **`ShellRunner.Since`**: Retrieves incremental output from a job. If the job is finished, the status and exit code are also returned.
   - **Params**: `"<job_id>"`
@@ -103,8 +112,14 @@ A command-line client is provided in the `client/` directory.
 
 ### Usage
 
+You must specify the path to the server's socket using the `-socket` flag or the `SHELLRUNNER_SOCKET_PATH` environment variable.
+
 ```sh
-go run client/main.go <method> [args...]
+# Start the server and capture its socket path
+SOCKET_PATH=$(./shellrunner)
+
+# Use the client to interact with the server
+go run client/main.go -socket $SOCKET_PATH <method> [args...]
 ```
 
 **Available Methods:**
@@ -122,17 +137,17 @@ go run client/main.go <method> [args...]
 ### Examples
 
 ```sh
+# Start server and set socket path variable
+SOCKET_PATH=$(./shellrunner)
+
 # Run a command and keep its results for later
-go run client/main.go run "ls -la" --keep
+go run client/main.go -socket $SOCKET_PATH run "ls -la" --keep
 
 # Start a background job
-go run client/main.go background "sleep 5 && echo 'done'"
+go run client/main.go -socket $SOCKET_PATH background "sleep 5 && echo 'done'"
 
 # List all jobs
-go run client/main.go list
-
-# Get the status of job "1"
-go run client/main.go status "1"
+go run client/main.go -socket $SOCKET_PATH list
 ```
 
 ## Development

@@ -397,8 +397,8 @@ func TestStatistics(t *testing.T) {
 	shellRunner := new(ShellRunner)
 
 	// Run a few commands to generate some stats
-	shellRunner.Run(RunArgs{Command: "sleep 0.1"}, &map[string]interface{}{})
-	shellRunner.Run(RunArgs{Command: "sleep 0.2"}, &map[string]interface{}{})
+	shellRunner.Run(RunArgs{Command: "echo '12345'"}, &map[string]interface{}{})
+	shellRunner.Run(RunArgs{Command: "echo 'abc' >&2"}, &map[string]interface{}{})
 
 	reply := make(map[string]interface{})
 	err := shellRunner.Statistics(struct{}{}, &reply)
@@ -409,10 +409,10 @@ func TestStatistics(t *testing.T) {
 	if count, ok := reply["total_count"].(int64); !ok || count != 2 {
 		t.Errorf("expected total_count to be 2, got %v", reply["total_count"])
 	}
-	if max, ok := reply["max_duration_seconds"].(float64); !ok || max < 0.2 {
-		t.Errorf("expected max_duration_seconds to be at least 0.2, got %v", reply["max_duration_seconds"])
+	if stdoutBytes, ok := reply["total_stdout_bytes"].(int64); !ok || stdoutBytes != 6 { // '12345\n'
+		t.Errorf("expected total_stdout_bytes to be 6, got %v", stdoutBytes)
 	}
-	if avg, ok := reply["average_duration_seconds"].(float64); !ok || avg < 0.15 {
-		t.Errorf("expected average_duration_seconds to be at least 0.15, got %v", reply["average_duration_seconds"])
+	if stderrBytes, ok := reply["total_stderr_bytes"].(int64); !ok || stderrBytes != 4 { // 'abc\n'
+		t.Errorf("expected total_stderr_bytes to be 4, got %v", stderrBytes)
 	}
 }

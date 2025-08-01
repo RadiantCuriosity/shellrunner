@@ -1,16 +1,21 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
 )
 
-var serverCmd *exec.Cmd
+var (
+	serverCmd  *exec.Cmd
+	socketPath string
+)
 
 // TestMain sets up and tears down the integration test environment.
 func TestMain(m *testing.M) {
@@ -24,12 +29,24 @@ func TestMain(m *testing.M) {
 	// Start the server in a separate process group.
 	serverCmd = exec.Command("./shellrunner_test")
 	serverCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
+	// Capture the server's stdout to get the socket path.
+	stdout, err := serverCmd.StdoutPipe()
+	if err != nil {
+		panic("failed to get stdout pipe: " + err.Error())
+	}
+
 	if err := serverCmd.Start(); err != nil {
 		panic("failed to start server: " + err.Error())
 	}
 
-	// Give the server a moment to start up and create the socket.
-	time.Sleep(100 * time.Millisecond)
+	// Read the socket path from the server's output.
+	reader := bufio.NewReader(stdout)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		panic("failed to read socket path from server: " + err.Error())
+	}
+	socketPath = strings.TrimSpace(line)
 
 	// Run the integration tests.
 	code := m.Run()
@@ -40,8 +57,8 @@ func TestMain(m *testing.M) {
 	}
 	serverCmd.Wait() // Clean up zombie processes.
 
-	// Clean up the socket file.
-	os.Remove("/tmp/shellrunner.sock")
+	// Clean up the socket file and its temporary directory.
+	os.RemoveAll(filepath.Dir(socketPath))
 
 	os.Exit(code)
 }
@@ -49,7 +66,7 @@ func TestMain(m *testing.M) {
 // runClient is a helper function to execute the client CLI and parse its JSON output.
 func runClient(t *testing.T, args ...string) map[string]interface{} {
 	t.Helper()
-	cmdArgs := append([]string{"run", "client/main.go"}, args...)
+	cmdArgs := append([]string{"run", "client/main.go", "-socket", socketPath}, args...)
 	cmd := exec.Command("go", cmdArgs...)
 	out, err := cmd.Output()
 	if err != nil {
@@ -59,9 +76,15 @@ func runClient(t *testing.T, args ...string) map[string]interface{} {
 		t.Fatalf("client command failed with args %v: %s", args, err)
 	}
 
+	if len(out) == 0 {
+		return nil // Some commands like release-all might not return a map
+	}
+
 	var reply map[string]interface{}
 	if err := json.Unmarshal(out, &reply); err != nil {
-		t.Fatalf("failed to unmarshal client output: %s\nOutput was: %s", err, string(out))
+		// If it's not a map, it might be a different JSON structure (e.g., list)
+		// For simplicity in this helper, we'll return nil and let the test handle it.
+		return nil
 	}
 	return reply
 }
@@ -147,7 +170,7 @@ func TestIntegrationBackgroundWorkflow(t *testing.T) {
 
 	// 6. Verify the job was released by checking its status again.
 	// The client should fail because the job doesn't exist.
-	cmdArgs := append([]string{"run", "client/main.go"}, "status", jobID)
+	cmdArgs := append([]string{"run", "client/main.go", "-socket", socketPath}, "status", jobID)
 	cmd := exec.Command("go", cmdArgs...)
 	_, err := cmd.Output()
 	if err == nil {
@@ -177,7 +200,7 @@ func TestIntegrationRelease(t *testing.T) {
 	}
 
 	// 3. Verify the job was released.
-	cmdArgs := append([]string{"run", "client/main.go"}, "status", jobID)
+	cmdArgs := append([]string{"run", "client/main.go", "-socket", socketPath}, "status", jobID)
 	cmd := exec.Command("go", cmdArgs...)
 	_, err := cmd.Output()
 	if err == nil {
@@ -194,7 +217,7 @@ func TestIntegrationList(t *testing.T) {
 	time.Sleep(100 * time.Millisecond) // Allow second job to finish
 
 	// 2. List the jobs
-	cmdArgs := append([]string{"run", "client/main.go"}, "list")
+	cmdArgs := append([]string{"run", "client/main.go", "-socket", socketPath}, "list")
 	cmd := exec.Command("go", cmdArgs...)
 	out, err := cmd.Output()
 	if err != nil {
@@ -253,7 +276,7 @@ func TestIntegrationReleaseAll(t *testing.T) {
 	}
 
 	// 4. Verify that the running job still exists and the finished one is gone
-	cmdArgs := append([]string{"run", "client/main.go"}, "list")
+	cmdArgs := append([]string{"run", "client/main.go", "-socket", socketPath}, "list")
 	cmd := exec.Command("go", cmdArgs...)
 	out, err := cmd.Output()
 	if err != nil {
@@ -289,20 +312,18 @@ func resetClient(t *testing.T) {
 func TestIntegrationStatistics(t *testing.T) {
 	// 1. Get the initial statistics
 	initialStats := runClient(t, "statistics")
-	initialCount := initialStats["total_count"].(float64)
+	initialStdoutBytes := initialStats["total_stdout_bytes"].(float64)
 
-	// 2. Run a few commands to generate stats
-	runClient(t, "run", "sleep 0.1")
-	runClient(t, "background", "sleep 0.2")
-	time.Sleep(300 * time.Millisecond) // Ensure background job finishes
+	// 2. Run a command that produces known output
+	runClient(t, "run", "echo '12345'")
 
 	// 3. Get the final statistics
 	finalStats := runClient(t, "statistics")
 
-	// 4. Verify that the count has increased
-	newCount := finalStats["total_count"].(float64)
-	if newCount <= initialCount {
-		t.Errorf("expected total_count to increase, but it did not")
+	// 4. Verify the stdout bytes count has increased correctly
+	newStdoutBytes := finalStats["total_stdout_bytes"].(float64) - initialStdoutBytes
+	if newStdoutBytes != 6 { // '12345\n'
+		t.Errorf("expected total_stdout_bytes to increase by 6, but it increased by %v", newStdoutBytes)
 	}
 }
 

@@ -40,7 +40,7 @@ current status.
 
 ** statistics
 Returns statistics about all commands executed since the server started, including the
-total count, average duration, and maximum duration.
+total count, average duration, maximum duration, and total bytes for stdout and stderr.
 
 ** since
 Takes a unique id and returns any new stdout and stderr output since the last time
@@ -69,12 +69,19 @@ To run the server, execute the following command:
 ./shellrunner
 #+end_src
 
-The server will listen on a unix socket at `/tmp/shellrunner.sock`.
+By default, the server will create a temporary directory for its Unix socket. The path to
+this socket will be the first and only line printed to stdout.
+
+You can specify a socket path using the `-socket` flag or the `SHELLRUNNER_SOCKET_PATH`
+environment variable.
+
+#+begin_src sh
+./shellrunner -socket /tmp/mysocket.sock
+#+end_src
 
 *** Client Usage
-A test client is provided in the `client/` directory.
-
-To use the client, run the following command from the project root:
+A test client is provided in the `client/` directory. You must specify the socket path
+using the `-socket` flag or the `SHELLRUNNER_SOCKET_PATH` environment variable.
 #+begin_src sh
 go run client/main.go <method> [args...]
 #+end_src

@@ -32,9 +32,11 @@ type BackgroundJob struct {
 
 // ExecutionStatistics holds statistics about command executions.
 type ExecutionStatistics struct {
-	TotalCount    int64
-	TotalDuration time.Duration
-	MaxDuration   time.Duration
+	TotalCount       int64
+	TotalDuration    time.Duration
+	MaxDuration      time.Duration
+	TotalStdoutBytes int64
+	TotalStderrBytes int64
 }
 
 var (
@@ -51,7 +53,7 @@ var (
 	statsMutex = &sync.Mutex{}
 )
 
-func updateStats(duration time.Duration) {
+func updateStats(duration time.Duration, stdoutBytes, stderrBytes int) {
 	statsMutex.Lock()
 	defer statsMutex.Unlock()
 
@@ -60,6 +62,8 @@ func updateStats(duration time.Duration) {
 	if duration > stats.MaxDuration {
 		stats.MaxDuration = duration
 	}
+	stats.TotalStdoutBytes += int64(stdoutBytes)
+	stats.TotalStderrBytes += int64(stderrBytes)
 }
 
 // ShellRunner is the receiver for the RPC methods.
@@ -83,7 +87,7 @@ func (s *ShellRunner) Run(args RunArgs, reply *map[string]interface{}) error {
 	err := command.Run()
 	endTime := time.Now()
 
-	updateStats(endTime.Sub(startTime))
+	updateStats(endTime.Sub(startTime), stdout.Len(), stderr.Len())
 
 	(*reply)["stdout"] = stdout.String()
 	(*reply)["stderr"] = stderr.String()
@@ -148,10 +152,11 @@ func (s *ShellRunner) Background(cmd string, reply *string) error {
 		logger.Printf("Starting background job %s: %s", id, cmd)
 		err := job.Cmd.Run()
 		job.EndTime = time.Now()
-		updateStats(job.EndTime.Sub(job.StartTime))
+		updateStats(job.EndTime.Sub(job.StartTime), job.Stdout.Len(), job.Stderr.Len())
 
 		mutex.Lock()
 		defer mutex.Unlock()
+
 		if err != nil {
 			if exitError, ok := err.(*exec.ExitError); ok {
 				job.ExitCode = exitError.ExitCode()
@@ -294,6 +299,8 @@ func (s *ShellRunner) Statistics(args struct{}, reply *map[string]interface{}) e
 	(*reply)["total_count"] = stats.TotalCount
 	(*reply)["average_duration_seconds"] = avgDuration
 	(*reply)["max_duration_seconds"] = stats.MaxDuration.Seconds()
+	(*reply)["total_stdout_bytes"] = stats.TotalStdoutBytes
+	(*reply)["total_stderr_bytes"] = stats.TotalStderrBytes
 
 	return nil
 }
@@ -335,6 +342,7 @@ func (s *ShellRunner) Since(id string, reply *map[string]interface{}) error {
 func main() {
 	// Setup command-line flags.
 	logging := flag.Bool("logging", false, "Enable logging to stdout.")
+	socketPathFlag := flag.String("socket", "", "Path to the Unix socket. Overrides SHELLRUNNER_SOCKET_PATH.")
 	flag.Parse()
 
 	// Setup logging.
@@ -350,17 +358,37 @@ func main() {
 	shellRunner := new(ShellRunner)
 	rpc.Register(shellRunner)
 
-	socketPath := "/tmp/shellrunner.sock"
-	// Ensure the socket from a previous run is removed.
-	if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
-		log.Fatalf("failed to remove old socket: %v", err)
+	// Determine socket path
+	socketPath := *socketPathFlag
+	if socketPath == "" {
+		socketPath = os.Getenv("SHELLRUNNER_SOCKET_PATH")
 	}
 
-	listener, err := net.Listen("unix", socketPath)
-	if err != nil {
-		logger.Fatalf("Error listening: %v", err)
+	var listener net.Listener
+	var err error
+
+	if socketPath != "" {
+		// Use the user-specified path.
+		listener, err = net.Listen("unix", socketPath)
+		if err != nil {
+			log.Fatalf("Error listening on specified socket: %v", err)
+		}
+	} else {
+		// Create a temporary directory for the socket.
+		tempDir, err := os.MkdirTemp("", "shellrunner-")
+		if err != nil {
+			log.Fatalf("Failed to create temp dir for socket: %v", err)
+		}
+		socketPath = tempDir + "/shellrunner.sock"
+		listener, err = net.Listen("unix", socketPath)
+		if err != nil {
+			log.Fatalf("Error listening on temporary socket: %v", err)
+		}
 	}
 	defer listener.Close()
+
+	// The first and only thing to stdout should be the socket path.
+	fmt.Println(socketPath)
 
 	logger.Println("Server listening on", socketPath)
 
